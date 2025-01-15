@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PlayBook: Moby Dick</title>
+    <style>
+        body {
+            background-color: #000;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: monospace;
+        }
+        
+        #ascii-header {
+            color: #fff;
+            white-space: pre;
+            font-size: 14px;
+            line-height: 14px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        #terminal {
+            width: 30%;
+            background-color: #000;
+            border: 2px solid #fff;
+            padding: 10px;
+            color: #fff;
+            overflow-y: auto;
+            white-space: pre;
+            font-size: 14px;
+            line-height: 14px;
+            position: relative;
+        }
+        
+        #output {
+            margin-bottom: 20px;
+        }
+        
+        #input-line {
+            display: flex;
+            margin-top: 10px;
+            opacity: 0;  /* Hidden until boot sequence completes */
+        }
+        
+        #prompt {
+            color: #fff;
+            margin-right: 8px;
+        }
+        
+        #command-input {
+            border: none;
+            background-color: #000;
+            color: #fff;
+            font-family: monospace;
+            font-size: 14px;
+            flex-grow: 1;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="ascii-header">
+        <pre>
+        .-''-.,_.-''-._
+       /     .'      . \
+      |  .-'|        |'-.\
+      |.' . |   .-.  | . |
+      | . . | -'   '-|. .|
+      |.... |        |...|
+      | ....|    |   |...| ,
+      '..... \  / \  |...'//
+       '.....\/|   | /...'/
+        \~~~~~/ \  |/~~~~/
+   ,     \~~~/ . \ /~~~/'
+    \     \~~|  . |~~//
+     \     \~|   .|~//
+      \     \|   .|//
+    ___\     |   .Y/
+   /   ,|    |   |
+  |    ||    |   |
+  |    ||    |   |
+  |    ||    |   |
+  |  .-||    |   |
+  |-'  ||    |'. |
+  |    ||    |  '|    _.-''-.
+  |    ||    |   |.-''       \
+  |    ||    |   |        .-'\\
+  |    ||    | _ |    .-'     )
+  |    ||    |/ \| .-'   .   /
+  |    ||    |   .-'  .-'  .'
+  |    ||.-' .'  .-' _.-'
+  |  _.' .-'  .-' .-'
+  |.'  .'  .-'_.-'
+  | .-'  .-'
+  |-' .-'
+  '-''
+        </pre>
+    </div>
+    <div id="terminal">
+        <div id="output"></div>
+        <div id="input-line">
+            <span id="prompt">&gt;</span>
+            <input type="text" id="command-input" autofocus>
+        </div>
+    </div>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const output = document.getElementById('output');
+        const input = document.getElementById('command-input');
+        const inputLine = document.getElementById('input-line');
+        let gameStarted = false;
+
+        async function typeText(text, delay = 50) {
+            for (let char of text) {
+                output.innerHTML += char;
+                terminal.scrollTop = terminal.scrollHeight;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+            output.innerHTML += '\n';
+        }
+
+        async function bootSequence() {
+            // Type out the command path
+            await typeText('C:\\>', 30);
+            await typeText('cd\\chaoticgood', 30);
+            await typeText('C:\\CHAOTICGOOD>', 30);
+            await typeText('PlayBook.exe', 30);
+            
+            // Quick BIOS-style messages
+            const messages = [
+                'SOMERVILLE SYSTEMS BIOS v2.25',
+                'Story Engine......................Enabled',
+                'Narrative Generator...............OK',
+                'Loading Character Profiles........Done',
+                'Initializing Themes...............OK',
+                'Memory Test.......................',
+                '[||||||||||||||||||||||] 100%'
+            ];
+
+            for (let msg of messages) {
+                output.innerHTML += msg + '\n';
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+
+            // Start the actual game
+            try {
+                const response = await fetch('/start');
+                const data = await response.json();
+                if (data.title_screen) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    output.innerHTML += '\n\n' + data.title_screen + '\n';
+                    
+                    // Now show the mysterious choices
+                    await typeText('\nCall me Ishmael.', 30);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    await typeText('Call me Queequeg.', 30);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    await typeText('Call me Starbuck.', 30);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    await typeText('Call me Ahab.', 30);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    await typeText('Call me Moby.', 30);
+                    await new Promise(resolve => setTimeout(resolve, 400));
+                    
+                    await typeText('\nType HELP for a list of commands.\n', 30);
+                    gameStarted = true;
+                    inputLine.style.opacity = '1';  // Show command prompt
+                    input.focus();
+                }
+            } catch (error) {
+                console.error('Error starting game:', error);
+                output.innerHTML += "\nError starting game. Please refresh the page.\n";
+            }
+        }
+
+        // Start boot sequence when page loads
+        window.onload = bootSequence;
+
+        // Handle commands
+        input.addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter' && gameStarted) {
+                const command = input.value.trim();
+                if (command) {
+                    output.innerHTML += `\n> ${command}\n`;
+                    input.value = '';
+
+                    try {
+                        const response = await fetch('/command', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ command })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.ascii_art) {
+                            asciiHeader.textContent = data.ascii_art;
+                        }
+                        if (data.text) {
+                            await typeText(data.text, 30);
+                        }
+                    } catch (error) {
+                        console.error('Error processing command:', error);
+                        output.innerHTML += "Error processing command. Please try again.\n";
+                    }
+                }
+                
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>

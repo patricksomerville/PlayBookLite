@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>4D Timeline Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: 'Georgia', serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .visualization-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #timeline-visualization {
+            height: 500px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        #character-network {
+            height: 400px;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 10px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .time-display {
+            font-size: 1.2em;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .data-legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 4px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .dot.canonical {
+            background: #34C759;
+        }
+        .dot.assumed {
+            background: #FF9500;
+            border: 1px dashed #666;
+        }
+        .data-note {
+            text-align: center;
+            color: #666;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+        .timeline-node.assumed circle {
+            stroke-dasharray: 4;
+        }
+        .timeline-node text.assumed {
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="visualization-panel">
+            <h2>Timeline Visualization</h2>
+            <div class="data-legend">
+                <div class="legend-item">
+                    <span class="dot canonical"></span> Canonical Data
+                </div>
+                <div class="legend-item">
+                    <span class="dot assumed"></span> Generated Data
+                </div>
+            </div>
+            <div class="controls">
+                <input type="range" min="0" max="100" value="0" class="slider" id="time-slider">
+                <div class="time-display" id="current-time">December 1850</div>
+            </div>
+            <div id="timeline-visualization"></div>
+        </div>
+
+        <div class="visualization-panel">
+            <h2>Character Network</h2>
+            <div class="data-note">
+                <small>Note: Character positions are approximated based on scene location</small>
+            </div>
+            <div id="character-network"></div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize visualizations
+        let timelineViz, networkViz;
+        let currentTimeIndex = 0;
+        let timelineData;
+        let width, height;
+
+        // Fetch and initialize data
+        async function initializeVisualizations() {
+            try {
+                const response = await fetch('/api/timeline');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                timelineData = await response.json();
+
+                // Initialize timeline visualization
+                initializeTimeline();
+                initializeCharacterNetwork();
+
+                // Setup time slider
+                document.getElementById('time-slider').addEventListener('input', (event) => {
+                    updateTimeIndex(parseInt(event.target.value));
+                });
+
+            } catch (error) {
+                console.error('Error initializing visualizations:', error);
+                document.getElementById('timeline-visualization').innerHTML = `
+                    <div style="color: red; padding: 20px;">
+                        Error loading timeline data. Please try refreshing the page.
+                    </div>
+                `;
+                document.getElementById('character-network').innerHTML = `
+                    <div style="color: red; padding: 20px;">
+                        Error loading timeline data. Please try refreshing the page.
+                    </div>
+                `;
+            }
+        }
+
+        function initializeTimeline() {
+            const container = document.getElementById('timeline-visualization');
+             width = container.clientWidth;
+            height = container.clientHeight;
+
+            const svg = d3.select('#timeline-visualization')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            function renderTimeline(data) {
+                console.log('Rendering timeline with data:', data);
+
+                // Clear previous visualization
+                d3.select('#timeline-visualization').select('svg').remove();
+
+
+                const nodeRadius = 40;
+
+                const svg = d3.select('#timeline-visualization')
+                    .append('svg')
+                    .attr('width', width)
+                    .attr('height', height);
+
+                // Add zoom behavior
+                const zoom = d3.zoom()
+                    .scaleExtent([0.5, 2])
+                    .on('zoom', (event) => {
+                        svg.select('g').attr('transform', event.transform);
+                    });
+
+                svg.call(zoom);
+
+                // Create container for zoomable content
+                const container = svg.append('g');
+
+                // Create arrow marker for edges
+                svg.append('defs').append('marker')
+                    .attr('id', 'arrowhead')
+                    .attr('viewBox', '-0 -5 10 10')
+                    .attr('refX', nodeRadius + 10)
+                    .attr('refY', 0)
+                    .attr('orient', 'auto')
+                    .attr('markerWidth', 6)
+                    .attr('markerHeight', 6)
+                    .attr('xoverflow', 'visible')
+                    .append('path')
+                    .attr('d', 'M 0,-5 L 10 ,0 L 0,5')
+                    .attr('fill', '#999')
+                    .style('stroke', 'none');
+
+                // Create force simulation
+                const simulation = d3.forceSimulation(data.nodes)
+                    .force('link', d3.forceLink(data.edges).id(d => d.id).distance(150))
+                    .force('charge', d3.forceManyBody().strength(-500))
+                    .force('center', d3.forceCenter(width / 2, height / 2))
+                    .force('collision', d3.forceCollide().radius(nodeRadius * 1.5));
+
+                // Draw edges with arrows
+                const edges = container.append('g')
+                    .selectAll('line')
+                    .data(data.edges)
+                    .enter()
+                    .append('line')
+                    .attr('marker-end', 'url(#arrowhead)')
+                    .style('stroke', '#999')
+                    .style('stroke-opacity', 0.6)
+                    .style('stroke-width', d => d.requirements ? 3 : 2);
+
+                // Create node groups
+                const nodes = container.append('g')
+                    .selectAll('g')
+                    .data(data.nodes)
+                    .enter()
+                    .append('g')
+                    .attr('class', 'timeline-node') 
+                    .call(d3.drag()
+                        .on('start', dragstarted)
+                        .on('drag', dragged)
+                        .on('end', dragended));
+
+                // Add circles for nodes
+                nodes.append('circle')
+                    .attr('r', nodeRadius)
+                    .style('fill', d => d.is_current ? '#34495e' : '#fff')
+                    .style('stroke', '#34495e')
+                    .style('stroke-width', 2);
+
+                // Add titles to nodes
+                const nodeText = nodes.append('text')
+                    .text(d => d.title.length > 15 ? d.title.substring(0, 12) + '...' : d.title)
+                    .attr('text-anchor', 'middle')
+                    .attr('dy', '.3em')
+                    .style('fill', d => d.is_current ? '#fff' : '#000')
+                    .style('font-size', '12px')
+                    .style('pointer-events', 'none');
+
+                nodes.classed('assumed', d => d.is_generated || false);
+                nodeText.classed('assumed', d => d.is_generated || false);
+
+
+                // Add tooltips
+                nodes.append('title')
+                    .text(d => {
+                        let tooltip = `${d.title}\n${d.description}\nLocation: ${d.location}`;
+                        tooltip += `\nCharacters: ${d.characters.join(', ')}`;
+                        tooltip += `\nData Source: ${d.is_generated ? 'Generated/Assumed' : 'Canonical'}`;
+                        if (d.is_generated) {
+                            tooltip += '\n(Position and relationships are approximated)';
+                        }
+                        return tooltip;
+                    });
+
+                // Update positions on each tick
+                simulation.on('tick', () => {
+                    edges
+                        .attr('x1', d => d.source.x)
+                        .attr('y1', d => d.source.y)
+                        .attr('x2', d => d.target.x)
+                        .attr('y2', d => d.target.y);
+
+                    nodes.attr('transform', d => `translate(${d.x},${d.y})`);
+                });
+
+                // Drag functions
+                function dragstarted(event) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    event.subject.fx = event.subject.x;
+                    event.subject.fy = event.subject.y;
+                }
+
+                function dragged(event) {
+                    event.subject.fx = event.x;
+                    event.subject.fy = event.y;
+                }
+
+                function dragended(event) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    event.subject.fx = null;
+                    event.subject.fy = null;
+                }
+            }
+            renderTimeline(timelineData);
+        }
+
+        function initializeCharacterNetwork() {
+            const container = document.getElementById('character-network');
+             width = container.clientWidth;
+            height = container.clientHeight;
+
+            const svg = d3.select('#character-network')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            // Add character network visualization code here
+        }
+
+
+        function updateTimeIndex(index) {
+            currentTimeIndex = index;
+            const currentNode = timelineData.nodes[index];
+
+            if (!currentNode) {
+                console.error('Invalid node index:', index);
+                return;
+            }
+
+            // Update timeline visualization
+            d3.selectAll('.timeline-node')
+                .classed('active', d => d.id === currentNode.id);
+
+            // Update character network
+            updateCharacterNetwork(currentNode);
+
+            // Update time display
+            updateTimeDisplay(currentNode);
+
+            console.log('Updating to node:', currentNode);
+        }
+
+        function updateTimeDisplay(node) {
+            if (!node) return;
+
+            const timeDisplay = document.getElementById('current-time');
+            if (timeDisplay) {
+                timeDisplay.textContent = node.date || 'Date unknown';
+            }
+        }
+
+        function updateCharacterNetwork(node) {
+            if (!node || !node.characters) return;
+
+            const container = d3.select('#character-network');
+            container.selectAll('*').remove();
+
+            // Create character nodes
+            const characters = node.characters.map(char => ({
+                id: char,
+                type: 'character'
+            }));
+
+            // Create simple force layout
+            const simulation = d3.forceSimulation(characters)
+                .force('charge', d3.forceManyBody().strength(-50))
+                .force('center', d3.forceCenter(width / 2, height / 2));
+
+            // Draw character nodes
+            const svg = container.append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            const nodes = svg.selectAll('circle')
+                .data(characters)
+                .enter()
+                .append('circle')
+                .attr('r', 10)
+                .attr('fill', '#3498db');
+
+            simulation.on('tick', () => {
+                nodes
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y);
+            });
+        }
+
+        // Initialize on load
+        window.addEventListener('load', initializeVisualizations);
+        window.addEventListener('resize', () => {
+            // Reinitialize visualizations on window resize
+            initializeVisualizations();
+        });
+    </script>
+</body>
+</html>
