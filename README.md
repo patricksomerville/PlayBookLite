@@ -1,6 +1,6 @@
 # PlayBook Lite: Meta-Aware Literary Personas
 
-A unique text adventure game featuring meta-aware literary personas trapped in a digital Villa Diodati. This project combines classic literature, artificial intelligence, and interactive storytelling to create an engaging experience where historical literary figures navigate their existence in a 21st-century AI game.
+A (wildly incomplete) unique text adventure game featuring meta-aware literary personas trapped in a digital Villa Diodati. This project combines classic literature, artificial intelligence, and interactive storytelling to create an engaging experience where historical literary figures navigate their existence in a 21st-century AI game.
 
 ## Features
 
